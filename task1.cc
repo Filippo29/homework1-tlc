@@ -33,7 +33,7 @@ void printIP(PointToPointStarHelper star, Ipv4InterfaceContainer csma1Interfaces
 
     printf("\nLink n6-n7:\n");
     for(int i = 0; i < 2; i++){
-        p2pInterfaces.Get(i).first->GetAddress(1,0).GetLocal().Print(std::cout);
+        p2pInterfaces.GetAddress(i).Print(std::cout);
         printf("\n");
     }
 
@@ -45,6 +45,8 @@ void printIP(PointToPointStarHelper star, Ipv4InterfaceContainer csma1Interfaces
 }
 
 int main(int argc, char* argv[]){
+    if(argc>1)
+        printf("%s\n\n", argv[1]);
     //creazione stella formata da n0, n1, n2, n3, n4
 	PointToPointHelper pointToPoint;
     pointToPoint.SetDeviceAttribute("DataRate", StringValue("80Mbps"));
@@ -54,60 +56,64 @@ int main(int argc, char* argv[]){
 
     //creazione csma1
     NodeContainer csma1Nodes;
+    csma1Nodes.Add(star.GetSpokeNode(3));
     csma1Nodes.Create(NCSMA1);
 
     CsmaHelper csma1;
     csma1.SetChannelAttribute("DataRate", StringValue("25Mbps"));
     csma1.SetChannelAttribute("Delay", TimeValue(NanoSeconds(10)));
+    NetDeviceContainer csma1Devices = csma1.Install(csma1Nodes);
     //fine csma1
 
     //creazione link tra n6 e n7
     NodeContainer p2pNodes;
+    p2pNodes.Add(csma1Nodes.Get(2));
     p2pNodes.Create(1);
-
-    PointToPointHelper pointToPoint2;
-    pointToPoint2.SetDeviceAttribute("DataRate", StringValue("80Mbps"));
-    pointToPoint2.SetChannelAttribute("Delay", StringValue("10us"));
     //fine creazione link tra n6 e n7
 
     //creazione csma2
     NodeContainer csma2Nodes;
+    csma2Nodes.Add(p2pNodes.Get(1)); //da scambiare
     csma2Nodes.Create(NCSMA2);
+
+    //link tra n6 e n7
+    PointToPointHelper pointToPoint2;
+    pointToPoint2.SetDeviceAttribute("DataRate", StringValue("80Mbps"));
+    pointToPoint2.SetChannelAttribute("Delay", StringValue("10us"));
+    NetDeviceContainer p2pDevices = pointToPoint2.Install(p2pNodes);
+    //fine link
 
     CsmaHelper csma2;
     csma2.SetChannelAttribute("DataRate", StringValue("30Mbps"));
     csma2.SetChannelAttribute("Delay", TimeValue(NanoSeconds(20)));
+    NetDeviceContainer csma2Devices = csma2.Install(csma2Nodes);
     //fine csma2
 	
     //install internet stack
     InternetStackHelper internet;
     star.InstallStack(internet);
 
-    internet.Install(csma1Nodes);
-    csma1Nodes.Add(star.GetSpokeNode(3)); //csma1Nodes.Get(2) è n4
-    
-    internet.Install(p2pNodes);
-    p2pNodes.Add(csma1Nodes.Get(1)); //csma1Nodes.Get(1) è n6
-
     internet.Install(csma2Nodes);
-    csma2Nodes.Add(p2pNodes.Get(0)); //p2pNodes.Get(0) è n7
+    
+    internet.Install(csma1Nodes.Get(1));
+    internet.Install(csma1Nodes.Get(2));
+    
     //fine install internet stack
 
     //assegnazione ipv4
-    star.AssignIpv4Addresses(Ipv4AddressHelper("10.0.1.0", "255.255.255.240"));
 
-    NetDeviceContainer csmaDevices = csma1.Install(csma1Nodes);
     Ipv4AddressHelper address;
     address.SetBase("192.118.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer csma1Interfaces = address.Assign(csmaDevices);
+    Ipv4InterfaceContainer csma1Interfaces = address.Assign(csma1Devices);
 
-    NetDeviceContainer p2pDevices = pointToPoint2.Install(p2pNodes);
+    address.SetBase("192.118.2.0", "255.255.255.0");
+    Ipv4InterfaceContainer csma2Interfaces = address.Assign(csma2Devices);
+    
+    star.AssignIpv4Addresses(Ipv4AddressHelper("10.0.1.0", "255.255.255.240"));
+    
     address.SetBase("10.0.2.0", "255.255.255.252");
     Ipv4InterfaceContainer p2pInterfaces = address.Assign(p2pDevices);
 
-    NetDeviceContainer csma2Devices = csma2.Install(csma2Nodes);
-    address.SetBase("192.118.2.0", "255.255.255.0");
-    Ipv4InterfaceContainer csma2Interfaces = address.Assign(csma2Devices);
     //fine assegnazione ipv4
 
     printIP(star, csma1Interfaces, p2pInterfaces, csma2Interfaces);
